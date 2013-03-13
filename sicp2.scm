@@ -140,15 +140,15 @@
 	(last-pair-iter (cdr items) (car items))))
   (last-pair-iter (cdr items) (car items)))
 
-(define (append lst1 lst2)
+(define (my-append lst1 lst2)
   (if (null? lst1)
       lst2
-      (cons (car lst1) (append (cdr lst1) lst2))))
+      (cons (car lst1) (my-append (cdr lst1) lst2))))
 
-(define (reverse alist)
+(define (my-reverse alist)
   (if (null? alist)
       alist
-      (append (reverse (cdr alist)) (list (car alist)))))
+      (my-append (my-reverse (cdr alist)) (list (car alist)))))
 
 (define (same-parity first . rest)
   (define (iter items accu)
@@ -706,7 +706,7 @@
   (let ((list1 (tree->list-2 set1))
 	(list2 (tree->list-2 set2)))
     (list->tree (intersection-set-o list1 list2))))
-     
+
 (define (tree->list-1 tree)
   (if (null? tree)
       '()
@@ -755,3 +755,95 @@
 	     (right-tree (car right-result))
 	     (remaining-elts (cdr right-result)))
 	(cons (make-tree this-entry left-tree right-tree) remaining-elts))))
+
+;; Huffman Encoding Tree
+(define (make-leaf symbol weight)
+  (list 'leaf symbol weight))
+
+(define (leaf? obj)
+  (and (pair? obj) (eq? (car obj) 'leaf)))
+
+(define (symbol-leaf leaf)
+  (second leaf))
+
+(define (weight-leaf leaf)
+  (third leaf))
+
+(define (make-code-tree left right)
+  (list (append (symbols left) (symbols right))
+	left
+	right
+	(+ (weight left) (weight right))))
+
+(define (symbols tree)
+  (if (leaf? tree)
+      (list (symbol-leaf tree))
+      (entry tree)))
+
+(define (weight tree)
+  (if (leaf? tree)
+      (weight-leaf tree)
+      (fourth tree)))
+
+(define (decode bits tree)
+  (define (decode-1 bits current-branch)
+    (if (null? bits)
+	bits
+	(let ((next-branch (choose-branch (car bits) current-branch)))
+	  (if (leaf? next-branch)
+	      (cons (symbol-leaf next-branch)
+		    (decode-1 (cdr bits) tree))
+	      (decode-1 (cdr bits) next-branch)))))
+  (decode-1 bits tree))
+
+(define (choose-branch bit branch)
+  (cond ((= bit 0)
+	 (left-branch branch))
+	((= bit 1)
+	 (right-branch branch))
+	(else
+	 (error "bad bit -- CHOOSE-BRANCH" bit))))
+
+;; adjoin-set for Huffman tree
+(define (adjoin-set-h x set)
+  (cond ((null? set) (list x))
+	((< (weight x) (weight (car set)))
+	 (cons x set))
+	(else
+	 (cons (car set) (adjoin-set-h x (cdr set))))))
+
+(define (make-leaf-set pairs)
+  (if (null? pairs)
+      pairs
+      (let ((pair (car pairs)))
+	(adjoin-set-h (make-leaf (first pair)
+				 (second pair))
+		      (make-leaf-set (cdr pairs))))))
+
+(define (encode message tree)
+  (if (null? message)
+      message
+      (append (encode-symbol (car message) tree)
+	      (encode (cdr message) tree))))
+
+(define (encode-symbol s tree)
+  (if (memq s (symbols tree))
+      (if (leaf? tree)
+	  '()
+	  (let ((left (left-branch tree))
+		(right (right-branch tree)))
+	    (if (memq s (symbols left))
+		(cons 0 (encode-symbol s left))
+		(cons 1 (encode-symbol s right)))))
+      (error "Cannot encode symbol -- ENCODE-SYMBOL" s)))
+
+(define (generate-huffman-tree pairs)
+  (successive-merge (make-leaf-set pairs)))
+
+(define (successive-merge leaf-set)
+  (cond ((null? leaf-set) leaf-set)
+	((= (length leaf-set) 1) (car leaf-set))
+	(else
+	 (successive-merge (adjoin-set-h (make-code-tree (first leaf-set)
+							 (second leaf-set))
+					 (cddr leaf-set))))))
